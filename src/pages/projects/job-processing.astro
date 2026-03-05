@@ -1,0 +1,208 @@
+---
+import ProjectLayout from '../../layouts/ProjectLayout.astro';
+---
+
+<ProjectLayout
+  title="Job Processing System"
+  subtitle="Background Job Orchestration"
+  description="A distributed job processor with priority queues, DAG-based workflow orchestration, and multiple retry strategies."
+  github="https://github.com/carissaayo/job-processing"
+  tags={['NestJS', 'BullMQ', 'Redis', 'PostgreSQL', 'TypeORM', 'Docker']}
+>
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Overview</h2>
+    <p class="text-zinc-400 leading-relaxed mb-4">
+      A background job processing system built with NestJS and BullMQ. Jobs are persisted in
+      PostgreSQL, queued in Redis via BullMQ, and processed by workers. The API and workers
+      run as separate processes (or containers) and can scale horizontally.
+    </p>
+    <p class="text-zinc-400 leading-relaxed">
+      This project focuses on the hard problems in job processing: reliable delivery, priority
+      scheduling, workflow orchestration, failure recovery, and operational visibility.
+    </p>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Architecture</h2>
+    <div class="architecture-block">
+      <pre><code>API (NestJS)  →  JobsService  →  BullMQ (Redis)  →  Workers  →  Handlers
+                       ↓                                           ↓
+                 PostgreSQL  ←───────────────────────────────  Job results
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  Priority Routing                                                   │
+│                                                                     │
+│  High (8-10)  ──→  high-priority queue   ──→  Worker Pool          │
+│  Medium (5-7) ──→  medium-priority queue ──→  Worker Pool          │
+│  Low (1-4)    ──→  low-priority queue    ──→  Worker Pool          │
+│                                                                     │
+│  Failed jobs  ──→  Dead Letter Queue (PostgreSQL)                  │
+└─────────────────────────────────────────────────────────────────────┘</code></pre>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Job Types</h2>
+    <div class="space-y-4">
+      <div class="p-5 bg-zinc-900/50 border border-zinc-800/80 rounded-xl">
+        <h3 class="text-zinc-200 font-semibold mb-2">
+          <code class="font-mono text-cyan-400">webhook.deliver</code>
+        </h3>
+        <p class="text-zinc-400 text-sm leading-relaxed">
+          HTTP POST to a URL with idempotency key, HMAC signature, and timeout. Retries on
+          5xx/429/408; fails fast on 4xx. Supports configurable retry strategies.
+        </p>
+      </div>
+      <div class="p-5 bg-zinc-900/50 border border-zinc-800/80 rounded-xl">
+        <h3 class="text-zinc-200 font-semibold mb-2">
+          <code class="font-mono text-cyan-400">report.generate</code>
+        </h3>
+        <p class="text-zinc-400 text-sm leading-relaxed">
+          Queries jobs by filters, exports CSV to disk. Optional webhook notification on
+          completion for async report delivery.
+        </p>
+      </div>
+      <div class="p-5 bg-zinc-900/50 border border-zinc-800/80 rounded-xl">
+        <h3 class="text-zinc-200 font-semibold mb-2">
+          <code class="font-mono text-cyan-400">image.thumbnail</code>
+        </h3>
+        <p class="text-zinc-400 text-sm leading-relaxed">
+          Downloads image from URL, generates thumbnails using Sharp. Optional webhook
+          notification on completion.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Key Engineering Decisions</h2>
+    <div class="space-y-8">
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Separate API and Worker Processes</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          The API server and workers run as independent processes communicating through Redis.
+          This allows scaling each independently: more API instances for higher ingestion throughput,
+          more workers for higher processing throughput. In Docker, these are separate containers
+          sharing the same Redis and PostgreSQL.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Multiple Retry Strategies</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          Each job can specify its retry strategy: <code class="text-cyan-400 font-mono text-sm">exponential_backoff</code>
+          (default), <code class="text-cyan-400 font-mono text-sm">fixed_delay</code>,
+          <code class="text-cyan-400 font-mono text-sm">immediate</code>, or
+          <code class="text-cyan-400 font-mono text-sm">circuit_breaker</code>. A
+          <code class="text-cyan-400 font-mono text-sm">NonRetryableJobError</code> class allows
+          handlers to skip retries for permanent failures (e.g., 404 from a webhook URL).
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">DAG-based Workflow Orchestration</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          Workflows define a directed acyclic graph of jobs with dependencies. Tree-shaped
+          workflows use BullMQ's FlowProducer; fan-out DAGs use a custom orchestrator. Workflow
+          creation is transactional (rollback on partial failure). Failed workflows can be
+          resumed by retrying only the failed nodes.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Dead Letter Queue with Resolution</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          Jobs that exhaust retries or throw non-retryable errors are persisted in a PostgreSQL
+          dead letter table. Each DLQ entry includes the full error history, original payload,
+          and resolution status. Operators can resolve entries as retried, ignored, fixed, or
+          deleted via the API.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Worker Crash Recovery</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          BullMQ's stall detection (<code class="text-cyan-400 font-mono text-sm">lockDuration</code>,
+          <code class="text-cyan-400 font-mono text-sm">stalledInterval</code>,
+          <code class="text-cyan-400 font-mono text-sm">maxStalledCount</code>) automatically
+          recovers jobs when a worker crashes mid-processing. Stalled jobs are re-queued up to a
+          configurable limit before moving to the DLQ.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">API Endpoints</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Method</th>
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Path</th>
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal">Description</th>
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-amber-400 font-mono">POST</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/jobs</td>
+            <td class="py-3">Create job (supports idempotency key)</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/jobs</td>
+            <td class="py-3">List jobs (filter by type, status, priority)</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/jobs/:id</td>
+            <td class="py-3">Get job details</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-amber-400 font-mono">POST</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/jobs/:id/retry</td>
+            <td class="py-3">Retry a failed job</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-amber-400 font-mono">POST</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/jobs/:id/cancel</td>
+            <td class="py-3">Cancel a pending/delayed job</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/dead-letters</td>
+            <td class="py-3">List dead letter queue entries</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-amber-400 font-mono">POST</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/workflows</td>
+            <td class="py-3">Create a workflow (DAG of jobs)</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-amber-400 font-mono">POST</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/workflows/:id/resume</td>
+            <td class="py-3">Resume a failed workflow</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/monitoring/stats</td>
+            <td class="py-3">System and queue statistics</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Project Structure</h2>
+    <div class="architecture-block">
+      <pre><code>src/
+├── modules/jobs/          # Controllers, services, handlers, DTOs
+├── modules/workflows/     # DAG orchestration, FlowProducer, resume
+├── modules/retry/         # Dead letter queue (list, get, resolve)
+├── modules/monitoring/    # System and queue statistics
+├── modules/audit/         # Job audit log (internal)
+├── core/queue/            # BullMQ factory, worker bootstrap, processor registry
+├── core/database/         # TypeORM, migrations
+├── common/                # Guards (API key, rate limit), DTOs
+└── config/                # Env validation, config</code></pre>
+    </div>
+  </section>
+</ProjectLayout>

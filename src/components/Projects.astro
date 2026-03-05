@@ -1,0 +1,81 @@
+---
+const projects = [
+  {
+    title: 'StreamForge',
+    subtitle: 'Distributed Event Processing Pipeline',
+    description:
+      'Receives events via HTTP, queues them in buffered channels, and processes them concurrently with a pool of worker goroutines. Batch-writes to MongoDB with dead letter queue for fault tolerance. Includes Prometheus metrics and graceful shutdown.',
+    tags: ['Go', 'MongoDB', 'Prometheus', 'Chi'],
+    href: '/projects/streamforge',
+  },
+  {
+    title: 'Job Processing System',
+    subtitle: 'Background Job Orchestration',
+    description:
+      'A distributed job processor with priority queues, DAG-based workflow orchestration, and multiple retry strategies including exponential backoff and circuit breakers. API and workers run as separate processes for horizontal scaling.',
+    tags: ['NestJS', 'BullMQ', 'Redis', 'PostgreSQL', 'Docker'],
+    href: '/projects/job-processing',
+  },
+  {
+    title: 'Multi-Tenant Workspace',
+    subtitle: 'SaaS Platform Architecture',
+    description:
+      'Slack-inspired multi-tenant backend with schema-per-tenant PostgreSQL isolation, workspace-scoped RBAC, JWT authentication, feature flags, and usage tracking. Designed for production-grade tenant isolation at scale.',
+    tags: ['NestJS', 'PostgreSQL', 'Redis', 'BullMQ', 'MinIO'],
+    href: '/projects/multi-tenant-platform',
+  },
+];
+---
+
+<section id="projects" class="section-container border-t border-zinc-900">
+  <p class="section-label">Projects</p>
+  <h2 class="section-title">What I've built</h2>
+  <p class="text-zinc-400 max-w-2xl mb-12">
+    Selected projects that demonstrate backend architecture, distributed systems
+    design, and production-level engineering. Each includes architecture
+    decisions and trade-off analysis.
+  </p>
+
+  <div class="space-y-6">
+    {
+      projects.map((project) => (
+        <a
+          href={project.href}
+          class="group block p-6 md:p-8 bg-zinc-900/50 border border-zinc-800/80 rounded-xl hover:border-zinc-700 hover:bg-zinc-900/80 transition-all duration-200"
+        >
+          <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+            <div>
+              <h3 class="text-xl font-semibold text-zinc-100 group-hover:text-cyan-400 transition-colors mb-1">
+                {project.title}
+              </h3>
+              <p class="text-sm font-mono text-zinc-500">{project.subtitle}</p>
+            </div>
+            <svg
+              class="w-5 h-5 text-zinc-600 group-hover:text-cyan-400 transition-all group-hover:translate-x-1 shrink-0 mt-1"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="2"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+              />
+            </svg>
+          </div>
+          <p class="text-zinc-400 text-sm leading-relaxed mb-5 max-w-3xl">
+            {project.description}
+          </p>
+          <div class="flex flex-wrap gap-2">
+            {project.tags.map((tag) => (
+              <span class="px-2.5 py-1 text-xs font-mono bg-zinc-800/80 border border-zinc-700/50 rounded-md text-zinc-400">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </a>
+      ))
+    }
+  </div>
+</section>

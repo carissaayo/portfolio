@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-zinc-950 text-zinc-300;
+  }
+
+  ::selection {
+    @apply bg-cyan-500/30 text-white;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-zinc-950;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-800 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-700;
+  }
+}
+
+@layer components {
+  .section-container {
+    @apply mx-auto max-w-5xl px-6 py-24 md:py-32;
+  }
+
+  .section-label {
+    @apply text-cyan-400 font-mono text-sm tracking-wider mb-4;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-zinc-50 mb-6;
+  }
+
+  .dot-pattern {
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .architecture-block {
+    @apply bg-zinc-900/80 border border-zinc-800 rounded-xl p-6 overflow-x-auto font-mono text-xs md:text-sm leading-relaxed text-zinc-400;
+  }
+}

@@ -1,0 +1,301 @@
+---
+import ProjectLayout from '../../layouts/ProjectLayout.astro';
+---
+
+<ProjectLayout
+  title="StreamForge"
+  subtitle="Distributed Event Processing Pipeline"
+  description="A distributed event processing pipeline built with Go that processes high-volume events with worker pools, batch writes, and fault tolerance."
+  github="https://github.com/carissaayo/go-distributed-event-processing"
+  tags={['Go', 'MongoDB', 'Prometheus', 'Chi', 'Zap']}
+>
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Overview</h2>
+    <p class="text-zinc-400 leading-relaxed mb-4">
+      StreamForge is a distributed event processing pipeline that receives events via HTTP,
+      queues them in a buffered channel, and processes them concurrently with a pool of worker
+      goroutines. Processed events are batch-written to MongoDB. The system includes structured
+      logging, Prometheus metrics, health checks, and graceful shutdown.
+    </p>
+    <p class="text-zinc-400 leading-relaxed">
+      This project demonstrates core Go concurrency patterns applied to a real infrastructure
+      problem: how to ingest, route, and persist high-volume events reliably without losing data
+      or blocking callers.
+    </p>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Architecture</h2>
+    <div class="architecture-block">
+      <pre><code>Client
+  │
+  ▼
+HTTP API (Chi Router)
+  │
+  ▼
+Event Validation & Enrichment
+  │
+  ▼
+Buffered Channel (10,000 capacity)
+  │
+  ▼
+Event Router (routes by event type)
+  │
+  ├──── Worker 0 ───┐
+  ├──── Worker 1 ───┤
+  ├──── Worker 2 ───┤
+  ├──── ...         ├──→ Batch Writer (flushes every 100 events or 1s)
+  ├──── Worker 6 ───┤                     │
+  └──── Worker 7 ───┘                     ▼
+                                       MongoDB
+                                          │
+                                    (on failure)
+                                          ▼
+                                  Dead Letter Queue</code></pre>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">How It Works</h2>
+    <ol class="space-y-3 text-zinc-400">
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">01</span>
+        <span>HTTP handler validates and enriches the incoming event (timestamps, metadata)</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">02</span>
+        <span>Event is submitted to a buffered channel using non-blocking send. Returns 503 if the buffer is full (backpressure).</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">03</span>
+        <span>One of 8 worker goroutines picks up the event from the shared channel</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">04</span>
+        <span>The event router directs it to the appropriate processor based on event type</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">05</span>
+        <span>The processor adds the event to a batch buffer protected by a mutex</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">06</span>
+        <span>The batcher flushes to MongoDB when the buffer hits 100 events or every 1 second (whichever comes first)</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">07</span>
+        <span>Failed writes go to an in-memory dead letter queue for later inspection</span>
+      </li>
+    </ol>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Key Engineering Decisions</h2>
+    <div class="space-y-8">
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Worker Pool Pattern</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          A fixed number of goroutines read from a shared buffered channel. This decouples HTTP
+          handlers from event processing, provides natural backpressure when the buffer fills,
+          and bounds the concurrency to prevent resource exhaustion. The worker count is
+          configurable via environment variables.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Non-blocking Submit with Backpressure</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          The <code class="text-cyan-400 font-mono text-sm">select</code> statement with a
+          <code class="text-cyan-400 font-mono text-sm">default</code> case prevents the HTTP handler
+          from blocking when the channel is full. Instead, it returns a 503 Service Unavailable,
+          giving clients a clear signal to retry. This is preferable to unbounded queuing which
+          hides backpressure and risks OOM.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Batch Writes with Time + Size Triggers</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          Events are accumulated in a buffer and flushed to MongoDB either when the batch reaches
+          100 events or after 1 second, whichever comes first. This amortizes the per-write cost
+          while maintaining acceptable latency. The batcher uses a <code class="text-cyan-400 font-mono text-sm">sync.Mutex</code>
+          to protect the shared buffer across goroutines.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Graceful Shutdown</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          On SIGINT/SIGTERM, the system stops accepting new events, drains the buffered channel,
+          waits for workers to finish via <code class="text-cyan-400 font-mono text-sm">sync.WaitGroup</code>,
+          performs a final flush of the batch buffer, and cleanly disconnects from MongoDB. No
+          events are lost during shutdown.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Go Patterns Used</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-6 text-zinc-400 font-mono font-normal">Pattern</th>
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal">Purpose</th>
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Worker pool</td>
+            <td class="py-3">Fixed goroutines reading from shared channel</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Buffered channel</td>
+            <td class="py-3">Decouples HTTP handlers from processing</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300"><code class="font-mono text-cyan-400">select</code> statement</td>
+            <td class="py-3">Multiplexes events, timers, and shutdown signals</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Non-blocking send</td>
+            <td class="py-3">Returns false instead of blocking when buffer full</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300"><code class="font-mono text-cyan-400">sync.Mutex</code></td>
+            <td class="py-3">Protects shared batch buffer and DLQ</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300"><code class="font-mono text-cyan-400">sync.WaitGroup</code></td>
+            <td class="py-3">Waits for all workers during shutdown</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300"><code class="font-mono text-cyan-400">context.WithCancel</code></td>
+            <td class="py-3">Propagates shutdown signal to all components</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-6 text-zinc-300">Interface dispatch</td>
+            <td class="py-3"><code class="font-mono text-cyan-400">Processor</code> interface allows swappable strategies</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">API Endpoints</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Method</th>
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Path</th>
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal">Description</th>
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/health</td>
+            <td class="py-3">Liveness check</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/ready</td>
+            <td class="py-3">Readiness check (pings MongoDB)</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/metrics</td>
+            <td class="py-3">Prometheus metrics endpoint</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"><span class="text-amber-400 font-mono">POST</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/events</td>
+            <td class="py-3">Submit an event for processing</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4"><span class="text-emerald-400 font-mono">GET</span></td>
+            <td class="py-3 pr-4 font-mono text-zinc-300">/api/v1/events/:id</td>
+            <td class="py-3">Retrieve a processed event</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Prometheus Metrics</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Metric</th>
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Type</th>
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal">Description</th>
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400 font-mono text-xs">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300">events_received_total</td>
+            <td class="py-3 pr-4">Counter</td>
+            <td class="py-3">Events received by the API</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300">events_processed_total</td>
+            <td class="py-3 pr-4">Counter</td>
+            <td class="py-3">Events successfully processed</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300">processing_duration_seconds</td>
+            <td class="py-3 pr-4">Histogram</td>
+            <td class="py-3">Per-event processing time</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300">batch_write_duration_seconds</td>
+            <td class="py-3 pr-4">Histogram</td>
+            <td class="py-3">MongoDB bulk write time</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300">channel_buffer_usage</td>
+            <td class="py-3 pr-4">Gauge</td>
+            <td class="py-3">Events waiting in channel</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-zinc-300">dlq_size</td>
+            <td class="py-3 pr-4">Gauge</td>
+            <td class="py-3">Events in dead letter queue</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Project Structure</h2>
+    <div class="architecture-block">
+      <pre><code>├── cmd/server/main.go           # Entry point, signal handling, graceful shutdown
+├── internal/
+│   ├── config/config.go         # Environment-based configuration
+│   ├── server/server.go         # HTTP server, routing, component wiring
+│   ├── api/
+│   │   ├── handlers.go          # HTTP handlers (create, get, health, ready)
+│   │   └── middleware.go        # Request logging, metrics middleware
+│   ├── event/
+│   │   ├── event.go             # Event struct and request/response types
+│   │   ├── validator.go         # Input validation
+│   │   └── enricher.go          # Timestamp and metadata enrichment
+│   ├── processing/
+│   │   ├── processing.go        # Processor interface, LogProcessor, BatchProcessor
+│   │   ├── worker.go            # Worker pool (goroutines + channel + WaitGroup)
+│   │   └── router.go            # Routes events to processors by type
+│   ├── storage/
+│   │   ├── mongodb.go           # MongoDB client (connect, insert, find, ping)
+│   │   ├── batcher.go           # Batch writer (buffer, flush loop, mutex)
+│   │   └── dlq.go               # Dead letter queue for failed writes
+│   ├── metrics/metrics.go       # Prometheus counters, histograms, gauges
+│   └── logger/logger.go         # Structured JSON logging (Zap)
+├── .env
+├── go.mod
+└── go.sum</code></pre>
+    </div>
+  </section>
+</ProjectLayout>

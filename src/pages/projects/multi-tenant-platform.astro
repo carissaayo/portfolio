@@ -1,0 +1,329 @@
+---
+import ProjectLayout from '../../layouts/ProjectLayout.astro';
+---
+
+<ProjectLayout
+  title="Multi-Tenant Workspace"
+  subtitle="SaaS Platform Architecture"
+  description="A Slack-inspired multi-tenant backend with schema-per-tenant PostgreSQL, workspace-scoped RBAC, and production-grade tenant isolation."
+  github="https://github.com/carissaayo/multi-tenancy-backend"
+  tags={['NestJS', 'PostgreSQL', 'Redis', 'BullMQ', 'MinIO', 'TypeORM', 'Passport.js']}
+>
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Overview</h2>
+    <p class="text-zinc-400 leading-relaxed mb-4">
+      A Slack-inspired, multi-tenant backend system designed to demonstrate real-world SaaS
+      architecture, strict tenant isolation, and scalable backend design. Each workspace is
+      a tenant, fully isolated at the data and authorization layers, while sharing a single
+      application and infrastructure.
+    </p>
+    <p class="text-zinc-400 leading-relaxed">
+      A single user can belong to multiple workspaces with different roles, mirroring how
+      production collaboration platforms work. This project focuses on architecture,
+      correctness, and scalability.
+    </p>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Architecture</h2>
+    <div class="architecture-block">
+      <pre><code>Client (Web / Mobile)
+         │
+    Load Balancer / API Gateway
+         │
+    Workspace Resolver (Tenant Middleware)
+         │
+    Authentication (JWT)
+         │
+    Authorization (Workspace RBAC)
+         │
+    Business Logic (Channels / Messages / Members)
+         │
+    Tenant-Scoped Database Access
+         │
+    Usage Tracking & Feature Flags
+         │
+    Response</code></pre>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Core Concepts</h2>
+    <div class="grid md:grid-cols-2 gap-6">
+      <div class="p-5 bg-zinc-900/50 border border-zinc-800/80 rounded-xl">
+        <h3 class="text-zinc-200 font-semibold mb-3">Tenant Model</h3>
+        <ul class="space-y-2 text-sm text-zinc-400">
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span><strong class="text-zinc-300">Tenant = Workspace</strong></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span>Identified via subdomain (<code class="font-mono text-cyan-400 text-xs">acme.app.com</code>)</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span>Fallbacks: headers and JWT claims</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span>All data access is workspace-scoped</span>
+          </li>
+        </ul>
+      </div>
+      <div class="p-5 bg-zinc-900/50 border border-zinc-800/80 rounded-xl">
+        <h3 class="text-zinc-200 font-semibold mb-3">Identity Model</h3>
+        <ul class="space-y-2 text-sm text-zinc-400">
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span><strong class="text-zinc-300">User</strong> = global identity</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span><strong class="text-zinc-300">WorkspaceMember</strong> = scoped role & permissions</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span>Users can belong to multiple workspaces</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-cyan-400 mt-0.5">&#8250;</span>
+            <span>Different roles per workspace</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Key Engineering Decisions</h2>
+    <div class="space-y-8">
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Schema-Per-Tenant Isolation</h3>
+        <p class="text-zinc-400 leading-relaxed mb-3">
+          Each workspace gets its own PostgreSQL schema within a shared database. This provides
+          strong data isolation, easy per-tenant auditing, and shared connection pooling without
+          the operational overhead of database-per-tenant.
+        </p>
+        <div class="architecture-block text-xs">
+          <pre><code>workspace_acme.channels
+workspace_acme.messages
+workspace_acme.members
+
+workspace_globex.channels
+workspace_globex.messages
+workspace_globex.members</code></pre>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Why Schema-Per-Tenant over Alternatives</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-zinc-800">
+                <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Approach</th>
+                <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Isolation</th>
+                <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal">Ops Cost</th>
+                <th class="text-left py-3 text-zinc-400 font-mono font-normal">Scale</th>
+              </tr>
+            </thead>
+            <tbody class="text-zinc-400">
+              <tr class="border-b border-zinc-800/50">
+                <td class="py-3 pr-4 text-zinc-300">Shared tables (row-level)</td>
+                <td class="py-3 pr-4">Weak</td>
+                <td class="py-3 pr-4">Low</td>
+                <td class="py-3">High</td>
+              </tr>
+              <tr class="border-b border-zinc-800/50 bg-zinc-800/20">
+                <td class="py-3 pr-4 text-cyan-400">Schema-per-tenant (chosen)</td>
+                <td class="py-3 pr-4">Strong</td>
+                <td class="py-3 pr-4">Medium</td>
+                <td class="py-3">High</td>
+              </tr>
+              <tr>
+                <td class="py-3 pr-4 text-zinc-300">Database-per-tenant</td>
+                <td class="py-3 pr-4">Strongest</td>
+                <td class="py-3 pr-4">High</td>
+                <td class="py-3">Limited</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Workspace-Scoped RBAC</h3>
+        <p class="text-zinc-400 leading-relaxed mb-3">
+          Roles are workspace-scoped, not global. A user can be an Owner in one workspace and
+          a Guest in another. The authorization layer checks workspace membership and role
+          before every operation.
+        </p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="p-3 bg-zinc-900/50 border border-zinc-800/80 rounded-lg text-center">
+            <p class="text-sm font-semibold text-zinc-200">Owner</p>
+            <p class="text-xs text-zinc-500">Full control</p>
+          </div>
+          <div class="p-3 bg-zinc-900/50 border border-zinc-800/80 rounded-lg text-center">
+            <p class="text-sm font-semibold text-zinc-200">Admin</p>
+            <p class="text-xs text-zinc-500">Manage workspace</p>
+          </div>
+          <div class="p-3 bg-zinc-900/50 border border-zinc-800/80 rounded-lg text-center">
+            <p class="text-sm font-semibold text-zinc-200">Member</p>
+            <p class="text-xs text-zinc-500">Standard access</p>
+          </div>
+          <div class="p-3 bg-zinc-900/50 border border-zinc-800/80 rounded-lg text-center">
+            <p class="text-sm font-semibold text-zinc-200">Guest</p>
+            <p class="text-xs text-zinc-500">Read-only</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Consistent Request Flow</h3>
+        <p class="text-zinc-400 leading-relaxed mb-3">
+          Every request follows the same pipeline. This consistency makes the system predictable
+          and auditable:
+        </p>
+        <ol class="space-y-2 text-zinc-400 text-sm">
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">1.</span>
+            <span>Resolve workspace from subdomain/header</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">2.</span>
+            <span>Validate JWT</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">3.</span>
+            <span>Verify workspace membership</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">4.</span>
+            <span>Check resource-level permissions</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">5.</span>
+            <span>Execute business logic in tenant schema</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">6.</span>
+            <span>Emit notification events</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">7.</span>
+            <span>Track usage metrics</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="text-cyan-400 font-mono shrink-0">8.</span>
+            <span>Return response</span>
+          </li>
+        </ol>
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-zinc-200 mb-2">Feature Flags & Plans</h3>
+        <p class="text-zinc-400 leading-relaxed">
+          Workspace plans control feature access: message history limits, file storage limits,
+          and advanced features (audit logs, integrations). Feature checks occur before
+          business logic execution, not after. This prevents wasted computation and provides
+          clear upgrade signals to users.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Technology Stack</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-6 text-zinc-400 font-mono font-normal">Layer</th>
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal">Technology</th>
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Backend Framework</td>
+            <td class="py-3">NestJS</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Database</td>
+            <td class="py-3">PostgreSQL (schema-per-tenant)</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">ORM</td>
+            <td class="py-3">TypeORM</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Cache / Counters</td>
+            <td class="py-3">Redis</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Background Jobs</td>
+            <td class="py-3">BullMQ</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">File Storage</td>
+            <td class="py-3">MinIO (S3-compatible)</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-6 text-zinc-300">Auth</td>
+            <td class="py-3">Passport.js + JWT</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-6 text-zinc-300">API Docs</td>
+            <td class="py-3">Swagger / OpenAPI</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">What This Project Demonstrates</h2>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="flex items-start gap-3 p-4 bg-zinc-900/30 rounded-lg">
+        <span class="text-cyan-400 text-lg leading-none">&#10003;</span>
+        <span class="text-zinc-300 text-sm">Real multi-tenant SaaS design (not demo CRUD)</span>
+      </div>
+      <div class="flex items-start gap-3 p-4 bg-zinc-900/30 rounded-lg">
+        <span class="text-cyan-400 text-lg leading-none">&#10003;</span>
+        <span class="text-zinc-300 text-sm">Correct isolation boundaries</span>
+      </div>
+      <div class="flex items-start gap-3 p-4 bg-zinc-900/30 rounded-lg">
+        <span class="text-cyan-400 text-lg leading-none">&#10003;</span>
+        <span class="text-zinc-300 text-sm">Clean authorization modeling</span>
+      </div>
+      <div class="flex items-start gap-3 p-4 bg-zinc-900/30 rounded-lg">
+        <span class="text-cyan-400 text-lg leading-none">&#10003;</span>
+        <span class="text-zinc-300 text-sm">Production-grade NestJS structure</span>
+      </div>
+      <div class="flex items-start gap-3 p-4 bg-zinc-900/30 rounded-lg">
+        <span class="text-cyan-400 text-lg leading-none">&#10003;</span>
+        <span class="text-zinc-300 text-sm">Trade-off awareness (schema vs database per tenant)</span>
+      </div>
+      <div class="flex items-start gap-3 p-4 bg-zinc-900/30 rounded-lg">
+        <span class="text-cyan-400 text-lg leading-none">&#10003;</span>
+        <span class="text-zinc-300 text-sm">Usage tracking and billing foundations</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Module Structure</h2>
+    <div class="architecture-block">
+      <pre><code>src/
+├── core/
+│   ├── tenant/            # Workspace resolution middleware
+│   ├── auth/              # JWT authentication
+│   ├── rbac/              # Workspace roles & permissions
+│   ├── feature-flags/     # Plan-based access control
+│   └── usage/             # Metrics & limits
+│
+├── workspaces/            # Workspace CRUD, schema provisioning
+├── members/               # Membership management, invitations
+├── channels/              # Channel CRUD, member management
+├── messages/              # Message persistence, thread support
+├── files/                 # MinIO upload, workspace-scoped storage
+└── notifications/         # Event emission, delivery</code></pre>
+    </div>
+  </section>
+</ProjectLayout>

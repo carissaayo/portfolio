@@ -1,0 +1,61 @@
+---
+const skillGroups = [
+  {
+    category: 'Languages',
+    skills: ['Go', 'TypeScript', 'JavaScript', 'SQL'],
+  },
+  {
+    category: 'Backend',
+    skills: ['NestJS', 'Chi (Go)', 'Node.js', 'REST APIs', 'Swagger'],
+  },
+  {
+    category: 'Databases & Storage',
+    skills: ['PostgreSQL', 'MongoDB', 'Redis', 'MinIO', 'TypeORM'],
+  },
+  {
+    category: 'Infrastructure',
+    skills: ['Docker', 'BullMQ', 'Prometheus', 'Zap Logging'],
+  },
+  {
+    category: 'Patterns & Architecture',
+    skills: [
+      'Multi-tenancy',
+      'Event-driven',
+      'Worker Pools',
+      'RBAC',
+      'Dead Letter Queues',
+      'Circuit Breakers',
+      'Batch Processing',
+      'Graceful Shutdown',
+    ],
+  },
+  {
+    category: 'Frontend',
+    skills: ['React', 'Next.js', 'Tailwind CSS', 'HTML/CSS'],
+  },
+];
+---
+
+<section id="skills" class="section-container border-t border-zinc-900">
+  <p class="section-label">Skills</p>
+  <h2 class="section-title">What I work with</h2>
+
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+    {
+      skillGroups.map((group) => (
+        <div class="space-y-4">
+          <h3 class="text-sm font-mono text-zinc-500 tracking-wider">
+            {group.category}
+          </h3>
+          <div class="flex flex-wrap gap-2">
+            {group.skills.map((skill) => (
+              <span class="px-3 py-1.5 text-sm bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:border-zinc-700 transition-colors">
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))
+    }
+  </div>
+</section>
