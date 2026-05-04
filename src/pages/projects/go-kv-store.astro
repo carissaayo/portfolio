@@ -1,0 +1,256 @@
+---
+import ProjectLayout from "../../layouts/ProjectLayout.astro";
+---
+
+<ProjectLayout
+  title="Durable KV Store"
+  subtitle="Write-Ahead Log & Snapshot Engine"
+  description="A key-value storage engine in Go (stdlib only) with WAL durability, CRC32-validated replay, atomic snapshots, and configurable fsync policies."
+  github="https://github.com/carissaayo/go-durable-kv"
+  tags={["Go", "WAL", "TCP/HTTP", "stdlib"]}
+>
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Overview</h2>
+    <p class="text-zinc-400 leading-relaxed mb-4">
+      A key-value storage engine focused on disk durability and crash recovery.
+      Writes are appended to a Write-Ahead Log (WAL) before being applied to an
+      in-memory index. On restart, the engine loads the last snapshot and
+      replays WAL records to rebuild state. Snapshot plus WAL compaction keeps
+      replay time bounded.
+    </p>
+    <p class="text-zinc-400 leading-relaxed">
+      Built with Go 1.21+ and the standard library only (no external database or
+      ORM). The goal is to understand correctness, durability, and recovery at
+      the storage layer.
+    </p>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Request flow</h2>
+    <ol class="space-y-3 text-zinc-400">
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">01</span>
+        <span>Client sends Set / Delete over TCP or HTTP</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">02</span>
+        <span>Engine acquires write lock</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">03</span>
+        <span>WAL record appended (op, key, value, CRC32)</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">04</span>
+        <span
+          ><code class="font-mono text-cyan-400">fsync</code> according to sync policy</span
+        >
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">05</span>
+        <span>Operation applied to in-memory map</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">06</span>
+        <span>Get uses read lock and reads memory only</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 font-mono text-sm shrink-0">07</span>
+        <span>Background snapshot when WAL exceeds threshold</span>
+      </li>
+    </ol>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Critical design rule</h2>
+    <blockquote class="border-l-4 border-cyan-500/60 pl-5 text-zinc-300 italic">
+      WAL append must happen before updating the in-memory map.
+    </blockquote>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">
+      Implementation highlights
+    </h2>
+    <ul class="space-y-3 text-zinc-400">
+      <li class="flex gap-3">
+        <span class="text-cyan-400 shrink-0">&#8250;</span>
+        <span
+          >In-memory Set / Get / Delete with <code
+            class="font-mono text-cyan-400 text-sm">sync.RWMutex</code
+          > (race-detector clean)</span
+        >
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 shrink-0">&#8250;</span>
+        <span>WAL append-before-apply with CRC32 record validation</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 shrink-0">&#8250;</span>
+        <span
+          >Recovery: load snapshot, then sequential WAL replay with corruption
+          handling</span
+        >
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 shrink-0">&#8250;</span>
+        <span
+          >Snapshot via <code class="font-mono text-cyan-400 text-sm"
+            >snapshot.tmp</code
+          > + atomic rename; WAL truncate after snapshot</span
+        >
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 shrink-0">&#8250;</span>
+        <span
+          >Sync policies: <code class="font-mono text-cyan-400 text-sm"
+            >SyncNone</code
+          >, <code class="font-mono text-cyan-400 text-sm">SyncAlways</code>, <code
+            class="font-mono text-cyan-400 text-sm">SyncPeriodic</code
+          ></span
+        >
+      </li>
+      <li class="flex gap-3">
+        <span class="text-cyan-400 shrink-0">&#8250;</span>
+        <span
+          >HTTP: <code class="font-mono text-cyan-400 text-sm"
+            >{"/keys/{key}"}</code
+          >,
+          <code class="font-mono text-cyan-400 text-sm">/health</code>,
+          <code class="font-mono text-cyan-400 text-sm">/metrics</code>;
+          graceful shutdown</span
+        >
+      </li>
+    </ul>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">
+      Durability vs throughput
+    </h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal"
+              >Policy</th
+            >
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal"
+              >Durability</th
+            >
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal"
+              >Throughput</th
+            >
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300 font-mono text-xs">SyncAlways</td
+            >
+            <td class="py-3 pr-4">Highest</td>
+            <td class="py-3">Lowest</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4 text-zinc-300 font-mono text-xs"
+              >SyncPeriodic</td
+            >
+            <td class="py-3 pr-4">Medium</td>
+            <td class="py-3">Medium / high</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 text-zinc-300 font-mono text-xs">SyncNone</td>
+            <td class="py-3 pr-4">Lowest</td>
+            <td class="py-3">Highest</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">HTTP API</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800">
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal"
+              >Method</th
+            >
+            <th class="text-left py-3 pr-4 text-zinc-400 font-mono font-normal"
+              >Path</th
+            >
+            <th class="text-left py-3 text-zinc-400 font-mono font-normal"
+              >Response</th
+            >
+          </tr>
+        </thead>
+        <tbody class="text-zinc-400">
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"
+              ><span class="text-emerald-400 font-mono">GET</span></td
+            >
+            <td class="py-3 pr-4 font-mono text-zinc-300">{"/keys/{key}"}</td>
+            <td class="py-3">200 or 404</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"
+              ><span class="text-amber-400 font-mono">PUT</span></td
+            >
+            <td class="py-3 pr-4 font-mono text-zinc-300">{"/keys/{key}"}</td>
+            <td class="py-3">204</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"
+              ><span class="text-red-400 font-mono">DELETE</span></td
+            >
+            <td class="py-3 pr-4 font-mono text-zinc-300">{"/keys/{key}"}</td>
+            <td class="py-3">204</td>
+          </tr>
+          <tr class="border-b border-zinc-800/50">
+            <td class="py-3 pr-4"
+              ><span class="text-emerald-400 font-mono">GET</span></td
+            >
+            <td class="py-3 pr-4 font-mono text-zinc-300">/health</td>
+            <td class="py-3">200</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4"
+              ><span class="text-emerald-400 font-mono">GET</span></td
+            >
+            <td class="py-3 pr-4 font-mono text-zinc-300">/metrics</td>
+            <td class="py-3">200 JSON</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-16">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Testing strategy</h2>
+    <ul class="space-y-2 text-zinc-400">
+      <li>
+        WAL encode/decode, CRC mismatch handling, Set/Get/Delete correctness
+      </li>
+      <li>Snapshot round-trip; restart and crash recovery scenarios</li>
+      <li>
+        <code class="font-mono text-cyan-400 text-sm">go test ./...</code> with race
+        detector
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold text-zinc-100 mb-6">Project structure</h2>
+    <div class="architecture-block">
+      <pre><code>├── cmd/server/main.go
+├── cmd/cli/main.go
+├── internal/engine/
+│   ├── engine.go
+│   ├── wal.go
+│   ├── snapshot.go
+│   ├── metrics.go
+│   └── *_test.go
+└── internal/transport/http.go</code></pre>
+    </div>
+  </section>
+</ProjectLayout>
